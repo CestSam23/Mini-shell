@@ -20,6 +20,17 @@ void cdCustom(char *path);
 
 //Executing commands
 void execute(char **args);
+void executePrograms(char **args);
+int numberOfPrompts = 0;
+pid_t pidProgram = 0;
+
+void writeCounter();
+void endOfProgram();
+void printPrompts();
+
+void killProgram();
+
+
 
 int main(){
 	char prompt[MAX_LINE];
@@ -31,7 +42,7 @@ int main(){
 		if(strlen(prompt)!=0)
 			separate_tokens(prompt, args);
 
-			
+
 		if(strcmp(args[0],"salir") ==0){
 			break;
 		} else if (strcmp(args[0],"cd")==0){
@@ -40,13 +51,31 @@ int main(){
 			} else {
 				cdCustom(args[1]);
 			}
+		} else if (args[0] != NULL && args[0][0] == '.'){
+			executePrograms(args);
 		} else if (args[0] != NULL){
 			execute(args);
 		}
-		
-	}
-}
 
+	}
+
+
+	//Atexit
+	if(atexit(printPrompts)!=0){
+		perror("Atexit");
+		exit(1);
+	}
+	if(atexit(writeCounter)!=0){
+		perror("Atexit");
+		exit(1);
+	}
+	if(atexit(endOfProgram) != 0){
+		perror("Atexit");
+		exit(1);
+	}
+
+	
+}
 
 
 void read_line(char *line){
@@ -69,13 +98,14 @@ void separate_tokens(char *line, char **args){
 void cdHome(){
 	if(chdir(getenv("HOME"))!=0){
 		perror("Error changing");
-	}
+	}	numberOfPrompts++;
+
 }
 
 void cdCustom(char *path){
 	if(chdir(path)!=0){
 		perror("");
-	}
+	}	numberOfPrompts++;
 }
 
 void currentDirectory(){
@@ -93,8 +123,9 @@ void currentDirectory(){
 			exit(-1);
 		default:
 			while(wait(&status)!=pid);
-			if (status == 0)
+			if (status == 0){
 				printf("");
+			}
 			else 
 				printf("Error en el hijo\n");
 	}
@@ -114,9 +145,59 @@ void execute(char **args){
 			exit(-1);
 		default:
 			while(wait(&status)!=pid);
-			if(status ==0)
+			if(status ==0){
+				numberOfPrompts++;
 				printf("");
-			else
-				printf("No se que hiciste mal Sam\n");
+			}
 	}
+}
+
+void executePrograms(char **args){
+	int status;
+	pid_t pid = pidProgram = fork();
+
+	switch(pid){
+		case -1: //Fallo
+			perror("Error en Fork");
+			exit(-1);
+		case 0:  //En Hijo
+			execvp(args[0],args);
+			perror("Error in exec");
+			exit(-1);
+		default:
+			signal(2,killProgram);
+			while(wait(&status)!=pid);
+			if(WIFEXITED(status)){
+				printf("\nTAREA %d TERMINADA CON ESTADO %d\n",pid,WEXITSTATUS(status));
+				signal(2,SIG_DFL);
+
+			} else if ( WIFSIGNALED(status)){
+				printf("\nTAREA %d INTERRUMPIDA POR LA SEÑAL %d\n",pid,WTERMSIG(status));
+				signal(2,SIG_DFL);
+			}
+			numberOfPrompts++;
+	}
+}
+
+void killProgram(){
+	kill(pidProgram,2);
+}
+
+void writeCounter(){
+	FILE *fPtr;
+
+	if((fPtr=fopen("Counter.txt","w"))==NULL){
+		printf("Error abriendo archivo\n");
+	} else {
+		fprintf(fPtr,"%d",numberOfPrompts);
+		fclose(fPtr);
+	}
+}
+
+void endOfProgram(){
+	printf("MiniShell Finalizado (:\n");
+}
+
+void printPrompts(){
+	printf("Prompts used: %d\n",numberOfPrompts);
 }
